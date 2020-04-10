@@ -1,0 +1,30 @@
+version: "3"
+
+volumes:
+  local_postgres_data: {}
+
+services:
+  django:
+    build: .
+    hostname: django
+    ports:
+      - "8002:8001"
+    depends_on:
+      - postgres
+    env_file:
+    - ./.envs/.postgres
+    environment:
+      DJANGO_SETTINGS_MODULE: "planyo.settings.prod"
+    volumes:
+      - /home/debian/planyo/certs:/certs
+    restart: always
+    stdin_open: true
+    tty: true
+  postgres:
+    image: postgres:17.2
+    hostname: postgres
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data
+    env_file:
+    - ./.envs/.postgres
+    restart: always

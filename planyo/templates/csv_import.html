@@ -1,0 +1,26 @@
+<html lang="pl-PL">
+<body>
+<form action="/" method="post">
+    {% csrf_token %}
+
+    {{ form.non_field_errors }}
+
+    <div class="fieldWrapper">
+        {{ form.environment.errors }}
+        {{ form.environment.label_tag }}
+        {{ form.environment }}
+        <span class="helptext">{{ form.environment.help_text }}</span>
+    </div>
+
+    <div class="file">
+        {{ form.file.errors }}
+        {{ form.file.label_tag }}
+        {{ form.file }}
+        <span class="helptext">{{ form.file.help_text }}</span>
+    </div>
+    <input type="submit" value="Wykonaj">
+</form>
+
+<a href="/admin">Admin</a>
+</body>
+</html>

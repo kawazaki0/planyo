@@ -1,0 +1,9 @@
+*.swp
+.idea
+.venv
+venv
+notes
+*.sqlite3
+*.pyc
+planyo/static
+planyo/integrator/static
