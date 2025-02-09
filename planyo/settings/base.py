@@ -15,6 +15,8 @@ DEBUG = False
 
 ALLOWED_HOSTS = ['maciej.fun', 'localhost', '172.20.0.3', '127.0.0.1', '51.222.111.3', 'vps-0a871643.vps.ovh.ca']
 
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -26,6 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # 'rest_framework',
     'planyo',
+    'synchronizer',
 ]
 
 MIDDLEWARE = [

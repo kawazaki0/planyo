@@ -4,10 +4,10 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
 
-import synchronizer.views
+# import synchronizer.synchronizer.views
 
 
 urlpatterns = [
     # path('', include(router.urls)),
-    path('', synchronizer.views.view),
+    # path('', synchronizer.synchronizer.views.view),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

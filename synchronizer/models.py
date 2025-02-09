@@ -16,6 +16,9 @@ class ZlFacility(models.Model):
     id = models.CharField(max_length=255, primary_key=True)
     name = models.CharField(max_length=255)
 
+    def __str__(self):
+        return f"{self.name} ({self.id})"
+
 
 class ZlDoctor(models.Model):
     id = models.CharField(max_length=255, primary_key=True)
@@ -23,6 +26,8 @@ class ZlDoctor(models.Model):
     name = models.CharField(max_length=255)
     surname = models.CharField(max_length=255)
 
+    def __str__(self):
+        return f"{self.name} ({self.id})"
 
 class ZlAddress(models.Model):
     id = models.CharField(max_length=255, primary_key=True)

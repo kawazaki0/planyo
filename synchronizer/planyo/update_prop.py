@@ -1,12 +1,4 @@
-import pytz as pytz
 import requests
-from pprint import pprint
-import datetime
-
-from django.utils.timezone import now
-
-from synchronizer.models import Reservation, PlResource
-
 
 
 class UpdateUserComment:

@@ -1,12 +1,6 @@
-import datetime
-
-import pytz
-from django.core.management.base import BaseCommand, CommandError
-from synchronizer.models import Reservation
-from synchronizer.planyo.playno import Planyo
+from django.core.management.base import BaseCommand
 # from synchronizer.znanylekarz.zl import Znanylekarz
 from synchronizer.planyo.update_prop import UpdateUserComment
-from synchronizer.znanylekarz.zl import Znanylekarz
 
 
 class Command(BaseCommand):

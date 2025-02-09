@@ -7,3 +7,4 @@ notes
 *.pyc
 planyo/static
 planyo/integrator/static
+.envs

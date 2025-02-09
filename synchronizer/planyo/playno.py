@@ -62,7 +62,7 @@ class Planyo(Calendar):
         #     "https://www.planyo.com/rest/?detail_level=&page=&list_resource_types=&admin_id=&prop_res_xyz=&ppp_gps_coords_radius=&ppp_resfilter=&sort=&site_id=48714&api_key=api_key_placeholder&method=list_resources"
             self.make_reservation(r)
 
-    def make_reservation(self, reservation):
+    def make_reservation(self, reservation: Reservation):
         timestamp_start = reservation.start_time #datetime.datetime(2020, 12, 1, 17, 0, tzinfo=pytz.timezone('Europe/Warsaw'))
         timestamp_end = reservation.start_time + datetime.timedelta(minutes=60)
 
