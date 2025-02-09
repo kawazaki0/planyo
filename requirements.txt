@@ -5,3 +5,4 @@ psycopg2-binary==2.9.10
 pytz==2025.1
 requests==2.32.3
 ratelimit==2.2.1
+pandas==2.2.3

@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
+import copy
+import datetime
 import functools
 import json
+import pandas as pd
+
 import logging
 from pprint import pprint
+from urllib.parse import urlencode
 
+import pytz
 from ratelimit import sleep_and_retry, limits
 import json
 import requests
@@ -79,54 +85,16 @@ class Znanylekarz(Calendar):
     @timeit
     @sleep_and_retry
     @limits(calls=3, period=1)
-    def api_call(self, endpoint):
+    def api_call(self, endpoint, query_params=None):
         logger.info(f"Request: {self.base_url + endpoint}")
         self.headers['Authorization'] = 'Bearer {}'.format(self._token)
-        resp = requests.get(self.base_url + endpoint, headers=self.headers)
+        resp = requests.get(self.base_url + endpoint, headers=self.headers, params=query_params)
         logger.info(f"Response: {resp.status_code}, {resp.text}")
         result = resp.json()
         if 'message' in result and result['message'] == 'Invalid credentials.':
             logger.info("Token expired or invalid")
             raise TokenExpiredException("Generate new api_key")
         return result
-
-    # def sync(self):
-    #     facilities = self.api_call('/facilities')
-    #     for f in facilities:
-    #         facility_filter = ZlFacility.objects.filter(id=f['id'])
-    #         if not facility_filter.exists():
-    #             facility = ZlFacility.objects.create(id=f['id'], name=f['name'])
-    #         else:
-    #             facility = facility_filter[0]
-    #
-    #         doctors = self.api_call('/facilities/{facility_id}/doctors'.format(facility_id=facility.id))
-    #         for d in doctors:
-    #             doctor_filter = ZlDoctor.objects.filter(id=d['id'])
-    #             if not doctor_filter.exists():
-    #                 doctor = ZlDoctor.objects.create(id=d['id'], facility=facility, name=d['name'], surname=d['surname'])
-    #             else:
-    #                 doctor = doctor_filter[0]
-    #             addresses = self.api_call('/facilities/{facility_id}/doctors/{doctor_id}/addresses'.format(facility_id=facility.id, doctor_id=doctor.id))
-    #             for a in addresses:
-    #                 address_filter = ZlAddress.objects.filter(id=a['id'])
-    #                 if not address_filter.exists():
-    #                     address = ZlAddress.objects.create(id=a['id'], doctor=doctor, name=a['name'], post_code=a['post_code'], street=a['street'])
-    #                 else:
-    #                     address = address_filter[0]
-    #
-    #                 bookings = self.api_call(
-    #                     '/facilities/{facility_id}/doctors/{doctor_id}/addresses/{address}/bookings?start=2020-02-01T10%3A00%3A00%2B02%3A00&end=2020-12-31T10%3A00%3A00%2B02%3A00'.format(
-    #                         facility_id=facility.id, doctor_id=doctor.id, address=address.id))
-    #                 for b in bookings:
-    #                     booking_filter = ZlBooking.objects.filter(id=b['id'])
-    #                     if not booking_filter.exists():
-    #                         booking = ZlBooking.objects.create(address=address, **b)
-    #                     else:
-    #                         booking = booking_filter[0]
-    #
-    #
-    #
-    #     pass
 
     def sync_down_resources_json(self):
 
@@ -150,8 +118,12 @@ class Znanylekarz(Calendar):
                 }
 
                 addresses = self.api_call(
-                    '/facilities/{facility_id}/doctors/{doctor_id}/addresses'.format(facility_id=f['id'],
-                                                                                     doctor_id=d['id']))['_items']
+                    '/facilities/{facility_id}/doctors/{doctor_id}'.format(
+                        facility_id=f['id'],
+                        doctor_id=d['id'],
+                    ),
+                    query_params={'with[]': ["doctor.addresses"]}
+                )['addresses']['_items']
                 for a in addresses:
                     address_data = {
                         'id': a['id'],
@@ -182,70 +154,85 @@ class Znanylekarz(Calendar):
         # with open('data.json', 'w') as json_file:
         #     json.dump(data, json_file, indent=4)
 
-    def sync_down_resources(self):
+    # def sync_down(self):
+    #     for facility in ZlFacility.objects.all():
+    #         for doctor in ZlDoctor.objects.all():
+    #             for address in ZlAddress.objects.all():
+    #                 bookings = self.api_call(
+    #                     '/facilities/{facility_id}/doctors/{doctor_id}/addresses/{address}/bookings?start=2020-02-01T10%3A00%3A00%2B02%3A00&end=2021-12-31T10%3A00%3A00%2B02%3A00'.format(
+    #                         facility_id=facility.id, doctor_id=doctor.id, address=address.id))['_items']
+    #                 for b in bookings:
+    #                     booking = self.api_call(
+    #                         '/facilities/{facility_id}/doctors/{doctor_id}/addresses/{address}/bookings/{booking}'.format(
+    #                             facility_id=facility.id, doctor_id=doctor.id, address=address.id, booking=b['id']))['_items']
+    #                     booking_filter = Reservation.objects.filter(zl_resource_id=b['id'])
+    #                     # booking_filter = ZlBooking.objects.filter(id=b['id'])
+    #                     address_service = ZlAddressService.objects.filter(id=booking['address_service']['id'])[0]
+    #                     reservation = Reservation.convert_zl_to_reservation(booking, address, doctor, facility, address_service)
+    #                     if not booking_filter.exists():
+    #                         reservation.save()
+    #                     else:
+    #                         r_db = booking_filter[0]
+    #                         if reservation.status != r_db.status:
+    #                             r_db.status = reservation.status
+    #                             r_db.save()
+    #                         reservation = r_db
+    #
+    #                     print('reservation', reservation)
 
-        facilities = self.api_call('/facilities')['_items']
-        for f in facilities:
-            facility_filter = ZlFacility.objects.filter(id=f['id'])
-            if not facility_filter.exists():
-                logger.info(f"Creating facility: {f}")
-                facility = ZlFacility.objects.create(id=f['id'], name=f['name'])
-            else:
-                facility = facility_filter[0]
+    @staticmethod
+    def format_datetime(dt):
+        formatted = dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+        return formatted
 
-            doctors = self.api_call('/facilities/{facility_id}/doctors'.format(facility_id=facility.id))['_items']
-            for d in doctors:
-                doctor_filter = ZlDoctor.objects.filter(id=d['id'])
-                if not doctor_filter.exists():
-                    doctor = ZlDoctor.objects.create(id=d['id'], facility=facility, name=d['name'], surname=d['surname'])
-                else:
-                    doctor = doctor_filter[0]
-                addresses = self.api_call('/facilities/{facility_id}/doctors/{doctor_id}/addresses'.format(facility_id=facility.id, doctor_id=doctor.id))['_items']
-                for a in addresses:
-                    address_filter = ZlAddress.objects.filter(id=a['id'])
-                    if not address_filter.exists():
-                        address = ZlAddress.objects.create(id=a['id'], doctor=doctor, name=a['name'], post_code=a['post_code'], street=a['street'])
-                    else:
-                        address = address_filter[0]
-                    print("----")
-                    print("facility:", f)
-                    print("doctor: ", d)
-                    print("address:", a)
-
-                    address_services = self.api_call('/facilities/{facility}/doctors/{doctor}/addresses/{address}/services'.format(facility=facility.id, doctor=doctor.id, address=address.id))['_items']
-                    for a_s in address_services:
-                        a_s_filter = ZlAddressService.objects.filter(id=a_s['id'])
-                        if not a_s_filter.exists():
-                            a_s_db = ZlAddressService.objects.create(id=a_s['id'], name=a_s['name'], service_id=a_s['service_id'], is_default=a_s['is_default'], description=a_s['description'], address=address)
-                            a_s_db.save()
-                        else:
-                            a_s_db = a_s_filter[0]
-
-    def sync_down(self):
-        for facility in ZlFacility.objects.all():
-            for doctor in ZlDoctor.objects.all():
-                for address in ZlAddress.objects.all():
+    def sync_down_json(self, data):
+        data2 = copy.copy(data)
+        for facility in data['facilities']:
+            for doctor in facility['doctors']:
+                for address in doctor['addresses']:
+                    address['bookings'] = address.get('bookings', [])
                     bookings = self.api_call(
-                        '/facilities/{facility_id}/doctors/{doctor_id}/addresses/{address}/bookings?start=2020-02-01T10%3A00%3A00%2B02%3A00&end=2021-12-31T10%3A00%3A00%2B02%3A00'.format(
-                            facility_id=facility.id, doctor_id=doctor.id, address=address.id))['_items']
+                        endpoint='/facilities/{facility_id}/doctors/{doctor_id}/addresses/{address}/bookings'.format(
+                            facility_id=facility['id'],
+                            doctor_id=doctor['id'],
+                            address=address['id'],
+                        ),
+                        query_params={'start': self.format_datetime(datetime.datetime.now(tz=pytz.UTC) - datetime.timedelta(days=30)),
+                                      'end': self.format_datetime(datetime.datetime.now(tz=pytz.UTC) + datetime.timedelta(days=10))},
+                        )['_items']
                     for b in bookings:
                         booking = self.api_call(
                             '/facilities/{facility_id}/doctors/{doctor_id}/addresses/{address}/bookings/{booking}'.format(
-                                facility_id=facility.id, doctor_id=doctor.id, address=address.id, booking=b['id']))['_items']
-                        booking_filter = Reservation.objects.filter(zl_resource_id=b['id'])
-                        # booking_filter = ZlBooking.objects.filter(id=b['id'])
-                        address_service = ZlAddressService.objects.filter(id=booking['address_service']['id'])[0]
-                        reservation = Reservation.convert_zl_to_reservation(booking, address, doctor, facility, address_service)
-                        if not booking_filter.exists():
-                            reservation.save()
-                        else:
-                            r_db = booking_filter[0]
-                            if reservation.status != r_db.status:
-                                r_db.status = reservation.status
-                                r_db.save()
-                            reservation = r_db
+                                facility_id=facility['id'], doctor_id=doctor['id'], address=address['id'], booking=b['id']))
+                        booking_data = {
+                            'id': booking['id'],
+                            'start_at': booking['start_at'],
+                            'end_at': booking['end_at'],
+                            'status': booking['status'],
+                            'patient': {
+                                'name': booking['patient']['name'],
+                                'surname': booking['patient']['surname'],
+                                'email': booking['patient']['email'],
+                                'phone': booking['patient']['phone'],
+                                'birth_date': booking['patient']['birth_date'],
+                                'nin': booking['patient']['nin'],
+                                'gender': booking['patient']['gender'],
+                                'is_returning': booking['patient']['is_returning'],
+                            },
+                            'address_service': {
+                                'id': booking['address_service']['id'],
+                                'name': booking['address_service']['name'],
+                                'price': booking['address_service']['price'],
+                                'service_id': booking['address_service']['service_id'],
+                                'is_visible': booking['address_service']['is_visible'],
+                                'description': booking['address_service']['description'],
+                            },
+                        }
 
-                        print('reservation', reservation)
+                        address['bookings'].append(booking_data)
+        logger.info(pprint(data2))
+        return data2
+
 
     # def sync_up(self):
     #     for reservation in Reservation.objects.filter(zl_resource_id=None):
@@ -322,6 +309,163 @@ class Znanylekarz(Calendar):
 
     renew_token = staticmethod(renew_token)
 
+
+def flatten_json(json_obj, parent_key='', sep='_'):
+    items = []
+    if isinstance(json_obj, dict):
+        for k, v in json_obj.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, (dict, list)):
+                items.extend(flatten_json(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+    elif isinstance(json_obj, list):
+        for i, item in enumerate(json_obj):
+            items.extend(flatten_json(item, f"{parent_key}{sep}{i}", sep=sep).items())
+    return dict(items)
+
+
+def convert_to_dataframe(resources_booking_json):
+    data = []
+    for facility in resources_booking_json['facilities']:
+        for doctor in facility['doctors']:
+            for address in doctor['addresses']:
+                for booking in address.get('bookings', []):
+                    flattened_booking = flatten_json({
+                        'facility': facility,
+                        'doctor': doctor,
+                        'address': address,
+                        'booking': booking
+                    })
+                    data.append(flattened_booking)
+    df = pd.DataFrame(data)
+    return df
+
 if __name__ == '__main__':
-    Znanylekarz().sync_down_resources_json()
-    # Znanylekarz().sync_down_resources()
+    zl = Znanylekarz()
+    resources_json = {
+        'facilities': [{'doctors': [{'addresses': [{'id': '925950',
+                                             'name': 'Planyo Clinic',
+                                             'post_code': None,
+                                             'services': [{'description': None,
+                                                           'id': '969582',
+                                                           'is_default': True,
+                                                           'name': 'konsultacja '
+                                                                   'anestezjologiczna',
+                                                           'service_id': '577'}],
+                                             'street': None}],
+                              'id': '343357',
+                              'name': 'Jędrzej',
+                              'surname': 'Marcinkowski'},
+                             {'addresses': [{'id': '929398',
+                                             'name': 'Planyo Clinic',
+                                             'post_code': None,
+                                             'services': [{'description': None,
+                                                           'id': '989704',
+                                                           'is_default': False,
+                                                           'name': 'Szczepienie',
+                                                           'service_id': '1405'}],
+                                             'street': None}],
+                              'id': '344586',
+                              'name': 'Mariusz',
+                              'surname': 'Platoński'},
+                             {'addresses': [{'id': '929397',
+                                             'name': 'Planyo Clinic',
+                                             'post_code': None,
+                                             'services': [{'description': None,
+                                                           'id': '989705',
+                                                           'is_default': True,
+                                                           'name': 'konsultacja '
+                                                                   'gastrologiczna '
+                                                                   'dzieci',
+                                                           'service_id': '3438'}],
+                                             'street': None}],
+                              'id': '344585',
+                              'name': 'Grzegorz',
+                              'surname': 'Testowy'}],
+                 'id': '231266',
+                 'name': 'Planyo Clinic'}]}
+    # resources_json = zl.sync_down_resources_json()
+    resources_booking_json = {
+        'facilities': [{'doctors': [{'addresses': [{'bookings': [{'address_service': {'description': None,
+                                                                                       'id': '969582',
+                                                                                       'is_visible': True,
+                                                                                       'name': 'konsultacja '
+                                                                                               'anestezjologiczna',
+                                                                                       'price': None,
+                                                                                       'service_id': '577'},
+                                                                   'end_at': '2025-02-11T20:30:00+01:00',
+                                                                   'id': '142456182',
+                                                                   'patient': {'birth_date': '1990-02-12',
+                                                                               'email': None,
+                                                                               'gender': None,
+                                                                               'is_returning': True,
+                                                                               'name': 'Test',
+                                                                               'nin': None,
+                                                                               'phone': '+48789145689',
+                                                                               'surname': 'Testowy2'},
+                                                                   'start_at': '2025-02-11T20:00:00+01:00',
+                                                                   'status': 'booked'}],
+                                                     'id': '925950',
+                                                     'name': 'Planyo Clinic',
+                                                     'post_code': None,
+                                                     'services': [{'description': None,
+                                                                   'id': '969582',
+                                                                   'is_default': True,
+                                                                   'name': 'konsultacja '
+                                                                           'anestezjologiczna',
+                                                                   'service_id': '577'}],
+                                                     'street': None}],
+                                      'id': '343357',
+                                      'name': 'Jędrzej',
+                                      'surname': 'Marcinkowski'},
+                                     {'addresses': [{'bookings': [{'address_service': {'description': None,
+                                                                                       'id': '989704',
+                                                                                       'is_visible': True,
+                                                                                       'name': 'Szczepienie',
+                                                                                       'price': None,
+                                                                                       'service_id': '1405'},
+                                                                   'end_at': '2025-02-10T11:30:00+01:00',
+                                                                   'id': '142455830',
+                                                                   'patient': {'birth_date': '1990-02-12',
+                                                                               'email': None,
+                                                                               'gender': None,
+                                                                               'is_returning': False,
+                                                                               'name': 'Test',
+                                                                               'nin': None,
+                                                                               'phone': '+48789145689',
+                                                                               'surname': 'Testowy2'},
+                                                                   'start_at': '2025-02-10T11:00:00+01:00',
+                                                                   'status': 'booked'}],
+                                                     'id': '929398',
+                                                     'name': 'Planyo Clinic',
+                                                     'post_code': None,
+                                                     'services': [{'description': None,
+                                                                   'id': '989704',
+                                                                   'is_default': False,
+                                                                   'name': 'Szczepienie',
+                                                                   'service_id': '1405'}],
+                                                     'street': None}],
+                                      'id': '344586',
+                                      'name': 'Mariusz',
+                                      'surname': 'Platoński'},
+                                     {'addresses': [{'bookings': [],
+                                                     'id': '929397',
+                                                     'name': 'Planyo Clinic',
+                                                     'post_code': None,
+                                                     'services': [{'description': None,
+                                                                   'id': '989705',
+                                                                   'is_default': True,
+                                                                   'name': 'konsultacja '
+                                                                           'gastrologiczna '
+                                                                           'dzieci',
+                                                                   'service_id': '3438'}],
+                                                     'street': None}],
+                                      'id': '344585',
+                                      'name': 'Grzegorz',
+                                      'surname': 'Testowy'}],
+                         'id': '231266',
+                         'name': 'Planyo Clinic'}]}
+    # resources_booking_json = zl.sync_down_json(resources_json)
+    df = convert_to_dataframe(resources_booking_json)
+    print(resources_booking_json)
