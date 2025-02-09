@@ -1,10 +1,10 @@
-# TODO application
+# Planyo integration
 
 ## Prerequisites
 
 The application requires:
-- Docker (tested on version 19.03.5)
-- docker-compose (tested on version 1.23.2)
+- Docker
+- docker-compose
 
 ## Setup
 
