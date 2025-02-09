@@ -31,4 +31,4 @@ done
 python manage.py migrate
 python manage.py collectstatic --noinput
 
-/usr/local/bin/gunicorn planyo.wsgi --bind 0.0.0.0:8001 --chdir=/app # --certfile=/certs/fullchain.pem --keyfile=/certs/privkey.pem
+/usr/local/bin/gunicorn --timeout 1800 planyo.wsgi --bind 0.0.0.0:8001 --chdir=/app # --certfile=/certs/fullchain.pem --keyfile=/certs/privkey.pem
